@@ -1,0 +1,10 @@
+site_name: ZonShift
+theme:
+  name: material
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
