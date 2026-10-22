@@ -1,144 +1,220 @@
-from dataclasses import dataclass
+"""Generic climate simulation for user-defined grow zones.
+
+A Zone owns named Variables (temperature, humidity, light, CO2, ...) and
+Devices that push those variables up or down. Nothing here is hardcoded to
+particular crops or equipment, so any zone shape can be described as data.
+Pure logic with no I/O.
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+from typing import Any
+
+from zonshift.errors import InvalidValueError
+
+
+def _require_finite(label: str, value: float) -> None:
+    """Raise InvalidValueError if value is NaN or infinite. O(1)."""
+    if not math.isfinite(value):
+        raise InvalidValueError(f"{label} must be a finite number, got {value!r}")
+
 
 @dataclass
-class Zone:
+class Variable:
+    """A controlled quantity inside a zone.
+
+    Attributes:
+        name: Key such as "temperature". Must match its key in Zone.variables.
+        unit: Display unit, such as "F", "%", or "umol/m2/s".
+        current: Present value.
+        target: Desired value.
+        minimum: Lowest physically allowed value.
+        maximum: Highest physically allowed value.
+
+    Raises:
+        InvalidValueError: If a value is not finite, minimum exceeds
+            maximum, or current/target fall outside the allowed range.
+    """
+
     name: str
-    current_temp_fahr: float
-    target_temp_fahr: float
-    current_humidity_perc: float
-    target_humidity_perc: float
-    current_light_ppfd: float
-    target_light_ppfd: float
+    unit: str
+    current: float
+    target: float
+    minimum: float = -math.inf
+    maximum: float = math.inf
+
+    def __post_init__(self) -> None:
+        _require_finite(f"{self.name}.current", self.current)
+        _require_finite(f"{self.name}.target", self.target)
+        if math.isnan(self.minimum) or math.isnan(self.maximum):
+            raise InvalidValueError(f"{self.name} limits cannot be NaN")
+        if self.minimum > self.maximum:
+            raise InvalidValueError(f"{self.name}: minimum exceeds maximum")
+        for label, value in (("current", self.current), ("target", self.target)):
+            if not self.minimum <= value <= self.maximum:
+                raise InvalidValueError(
+                    f"{self.name}.{label}={value} is outside "
+                    f"[{self.minimum}, {self.maximum}]"
+                )
+
 
 @dataclass
 class Device:
+    """Equipment that pushes one variable up and/or down.
+
+    Attributes:
+        name: Unique name within its zone.
+        metric: Name of the Variable it affects.
+        raise_rate_per_hour: Units per hour it can add (0 if it cannot raise).
+        lower_rate_per_hour: Units per hour it can remove (0 if it cannot lower).
+        is_on: True while actively adjusting its variable this step.
+
+    Raises:
+        InvalidValueError: If a rate is negative or non-finite, or both are 0.
+    """
+
     name: str
-    zone: str
+    metric: str
+    raise_rate_per_hour: float = 0.0
+    lower_rate_per_hour: float = 0.0
     is_on: bool = False
 
-@dataclass
-class Heater(Device):
-    heating_rate_fahr_per_hour: float = 1.0
+    def __post_init__(self) -> None:
+        for label, rate in (
+            ("raise_rate_per_hour", self.raise_rate_per_hour),
+            ("lower_rate_per_hour", self.lower_rate_per_hour),
+        ):
+            _require_finite(f"{self.name}.{label}", rate)
+            if rate < 0:
+                raise InvalidValueError(f"{self.name}.{label} must be >= 0, got {rate}")
+        if self.raise_rate_per_hour == 0 and self.lower_rate_per_hour == 0:
+            raise InvalidValueError(f"{self.name} must be able to raise or lower")
+
 
 @dataclass
-class Cooler(Device):
-    cooling_rate_fahr_per_hour: float = 1.0
+class Zone:
+    """A named grow zone with its variables and devices.
 
-@dataclass
-class Humidifier(Device):
-    humidity_rate_perc_per_hour: float = 1.0
+    Attributes:
+        name: Unique zone name chosen by the user.
+        variables: Variables keyed by name.
+        devices: Equipment installed in the zone.
 
-@dataclass
-class Dehumidifier(Device):
-    humidity_rate_perc_per_hour: float = 1.0
+    Raises:
+        InvalidValueError: On duplicate device names, a variable stored under
+            the wrong key, or a device that targets an unknown variable.
 
-@dataclass
-class GrowLight(Device):
-    current_ppfd: float = 0.0
-    target_ppfd: float = 0.0
-    ppfd_step: float = 10.0
-    
-tropical_zone = Zone(
-    name="tropical", 
-    current_temp_fahr=85.0,
-    target_temp_fahr=96.9,
-    current_humidity_perc=55.0,
-    target_humidity_perc=65.0,
-    current_light_ppfd=200.0,
-    target_light_ppfd=500.0
+    Complexity:
+        Construction is O(V + D) time and O(D) space for the device grouping.
+    """
+
+    name: str
+    variables: dict[str, Variable]
+    devices: list[Device] = field(default_factory=list)
+    _by_metric: dict[str, list[Device]] = field(
+        default_factory=dict, init=False, repr=False
     )
 
-tropical_heater = Heater(
-    name="tropical heater",
-    zone="tropical",
-    heating_rate_fahr_per_hour=2.0,
-)
+    def __post_init__(self) -> None:
+        for key, variable in self.variables.items():
+            if key != variable.name:
+                raise InvalidValueError(f"variable key {key!r} != name {variable.name!r}")
+        seen: set[str] = set()
+        for device in self.devices:
+            if device.name in seen:
+                raise InvalidValueError(f"duplicate device name {device.name!r}")
+            seen.add(device.name)
+            if device.metric not in self.variables:
+                raise InvalidValueError(
+                    f"{device.name!r} targets unknown variable {device.metric!r}"
+                )
+            self._by_metric.setdefault(device.metric, []).append(device)
 
-tropical_cooler = Cooler(
-    name="tropical cooler",
-    zone="tropical",
-    cooling_rate_fahr_per_hour=2.0,
-)
+    def device(self, name: str) -> Device:
+        """Return the device called ``name``. O(D) time.
 
-tropical_humidifier = Humidifier(
-    name="tropical humidifier",
-    zone="tropical",
-    humidity_rate_perc_per_hour=1.5,
-)
+        Raises:
+            InvalidValueError: If no device has that name.
+        """
+        for device in self.devices:
+            if device.name == name:
+                return device
+        raise InvalidValueError(f"no device named {name!r} in zone {self.name!r}")
 
-tropical_dehumidifier = Dehumidifier(
-    name="tropical dehumidifier",
-    zone="tropical",
-    humidity_rate_perc_per_hour=1.5,
-)
 
-tropical_light = GrowLight(
-    name="tropical grow light",
-    zone="tropical",
-    current_ppfd=200.0,
-    target_ppfd=500.0,
-)
+def step_zone(zone: Zone, hours: float = 1.0) -> Zone:
+    """Advance a zone by ``hours`` of simulated time.
 
-def update_zone(
-    zone: Zone,
-    heater: Heater,
-    cooler: Cooler,
-    humidifier: Humidifier,
-    dehumidifier: Dehumidifier,
-    light: GrowLight,
-    hours: float = 1.0,
-) -> Zone:
-    # Temperature control
-    if zone.current_temp_fahr < zone.target_temp_fahr:
-        heater.is_on = True
-        cooler.is_on = False
+    For each variable, every device able to push toward the target runs, and
+    the variable moves by the combined rate, stopping exactly at the target.
 
-        zone.current_temp_fahr = min(
-            zone.current_temp_fahr + heater.heating_rate_fahr_per_hour * hours,
-            zone.target_temp_fahr,
-            )
-        
-    elif zone.current_temp_fahr > zone.target_temp_fahr:
-        cooler.is_on = True
-        heater.is_on = False
+    Args:
+        zone: Zone to update in place.
+        hours: Step length in hours. Must be finite and >= 0.
 
-        zone.current_temp_fahr = max(
-            zone.current_temp_fahr - cooler.cooling_rate_fahr_per_hour * hours,
-            zone.target_temp_fahr,
-        )
-    else:
-        heater.is_on = False
-        cooler.is_on = False
+    Returns:
+        The same zone, for chaining.
 
-    # Humidity control
-    if zone.current_humidity_perc < zone.target_humidity_perc:
-        humidifier.is_on = True
-        dehumidifier.is_on = False
+    Raises:
+        InvalidValueError: If ``hours`` is negative or not finite.
 
-        zone.current_humidity_perc = min(
-            zone.current_humidity_perc + humidifier.humidity_rate_perc_per_hour * hours,
-            zone.target_humidity_perc,
-        )
-    elif zone.current_humidity_perc > zone.target_humidity_perc:
-        dehumidifier.is_on = True
-        humidifier.is_on = False
+    Complexity:
+        Time O(V + D), space O(1) extra, for V variables and D devices.
+    """
+    _require_finite("hours", hours)
+    if hours < 0:
+        raise InvalidValueError(f"hours must be >= 0, got {hours}")
 
-        zone.current_humidity_perc = max(
-            zone.current_humidity_perc - dehumidifier.humidity_rate_perc_per_hour * hours,
-            zone.target_humidity_perc,
-        )
-    else:
-        humidifier.is_on = False
-        dehumidifier.is_on = False
+    for variable in zone.variables.values():
+        devices = zone._by_metric.get(variable.name, [])
+        for device in devices:
+            device.is_on = False
 
-    # Light control
-    if zone.current_light_ppfd < zone.target_light_ppfd:
-        light.is_on = True
-        zone.current_light_ppfd = min(
-            zone.current_light_ppfd + light.ppfd_step * hours,
-            zone.target_light_ppfd,
-        )
-    else:
-        light.is_on = False
+        error = variable.target - variable.current
+        if error == 0:
+            continue
+
+        raising = error > 0
+        total_rate = 0.0
+        for device in devices:
+            rate = device.raise_rate_per_hour if raising else device.lower_rate_per_hour
+            if rate > 0:
+                device.is_on = True
+                total_rate += rate
+
+        move = total_rate * hours
+        if move >= abs(error):
+            variable.current = variable.target  # exact, avoids float drift
+        else:
+            variable.current += move if raising else -move
 
     return zone
+
+
+def build_zone(config: dict[str, Any]) -> Zone:
+    """Create a Zone from plain data (dict, parsed YAML, or JSON).
+
+    Expected shape::
+
+        {"name": "tropical",
+         "variables": {"temperature": {"unit": "F", "current": 85.0,
+                                        "target": 96.9}},
+         "devices": [{"name": "heater", "metric": "temperature",
+                      "raise_rate_per_hour": 2.0}]}
+
+    Raises:
+        InvalidValueError: If keys are missing, unexpected, or values invalid.
+
+    Complexity:
+        Time O(V + D), space O(V + D).
+    """
+    try:
+        variables = {
+            name: Variable(name=name, **spec)
+            for name, spec in config["variables"].items()
+        }
+        devices = [Device(**spec) for spec in config.get("devices", [])]
+        return Zone(name=config["name"], variables=variables, devices=devices)
+    except (KeyError, TypeError) as exc:
+        raise InvalidValueError(f"invalid zone config: {exc}") from exc
