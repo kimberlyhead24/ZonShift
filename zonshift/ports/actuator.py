@@ -1,3 +1,5 @@
+""" Copyright (C) 2026 Kimberly Head 
+SPDX-License-Identifier: GPL-3.0-or-later."""
 from dataclasses import dataclass
 from typing import Protocol
 
