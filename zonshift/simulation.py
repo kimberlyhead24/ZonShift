@@ -1,3 +1,6 @@
+""" Copyright (C) 2026 Kimberly Head
+SPDX-License-Identifier: GPL-3.0-or-later."""
+
 """Generic climate simulation for user-defined grow zones.
 
 A Zone owns named Variables (temperature, humidity, light, CO2, ...) and
