@@ -1,3 +1,6 @@
+""" Copyright (C) 2026 Kimberly Head 
+SPDX-License-Identifier: GPL-3.0-or-later."""
+
 """Sensor port: the interface the core uses to read zone conditions.
 
 Any object with a matching ``read`` method satisfies ``SensorPort``;
