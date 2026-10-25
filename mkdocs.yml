@@ -1,6 +1,12 @@
 site_name: ZonShift
+nav:
+  - Home: index.md
+  - About: about.md
+  - Timeline:  timeline.md
+  - Reference: reference.md
+
 theme:
-  name: material
+  name: readthedocs
 plugins:
   - search
   - mkdocstrings:
