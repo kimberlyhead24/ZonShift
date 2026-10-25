@@ -1,3 +1,6 @@
+"""Copyright (C) 2026 Kimberly Head 
+SPDX-License-Identifier: GPL-3.0-or-later."""
+
 """Exception types used across ZonShift.
 
 Every error raised on purpose derives from ZonShiftError, so callers can 

@@ -52,6 +52,7 @@ coverage.xml
 .pytest_cache/
 cover/
 
+
 # Translations
 *.mo
 *.pot
@@ -167,7 +168,7 @@ venv.bak/
 .ropeproject
 
 # mkdocs/Zensical documentation
-/site
+site/
 
 # mypy
 .mypy_cache/
@@ -218,3 +219,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+
+
