@@ -17,3 +17,5 @@ plugins:
         python:
           options:
             docstring_style: google
+  - markdown_extensions: [admonitions, pymdownx.details, pymdownx.superfences, tables]
+  
