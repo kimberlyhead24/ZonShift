@@ -1,15 +1,58 @@
 site_name: ZonShift
+site_description: Simulation-first vertical garden monitoring and thermal control
+repo_url: https://github.com/kimberlyhead24/ZonShift
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+plugins:
+  - search
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - tables
+  - attr_list
+  - toc:
+      permalink: true
 nav:
   - Home: index.md
-  - Plan: plan.md
-  - Design: about.md
-  - Safety:  scurity.md
-  - Reference: reference.md
-  - Complexity: complexity.md
-  - Conventions: conventions.md
-
-theme:
-  name: readthedocs
+  - Plan:
+      - Roadmap and tasks: plan.md
+      - Conventions: conventions.md
+  - Design:
+      - CRC cards: CRC.md
+      - Data model: data-model.md
+  - Safety:
+      - Security: security.md
+  - Reference:
+      - API: reference.md
+      - Complexity: complexity.md
 plugins:
   - search
   - mkdocstrings:
@@ -17,5 +60,3 @@ plugins:
         python:
           options:
             docstring_style: google
-  - markdown_extensions: [admonitions, pymdownx.details, pymdownx.superfences, tables]
-  
