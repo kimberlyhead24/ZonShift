@@ -10,7 +10,7 @@
 |---|---|---|---|
 | Temperature | Fahrenheit | `_f` | `temp_f` |
 | Time | seconds (monotonic) | `_s` | `expiry_s` |
-| Light | PPFD, umol/m2/s | `_ppfd` | `light_ppfd' |
+| Light | PPFD, umol/m2/s | `_ppfd` | `light_ppfd` |
 | Energy | kWh (electric), kJ (thermal) | `_kwh`, `_kj` | `stored_kj`|
 
 !!! warning "Temperatures differences"
@@ -19,8 +19,8 @@
   Never convert with the +32 offset for differences.
 
 ## Naming
-- Put the unit in the name: `target_temp_f`, not `target`.
-- Classes are nouns (`Reading`), ports end in `Port`.
+- Unit alwas in the name: `target_temp_f`, not `target`.
+- Ports end in `Port`.
 
 ## Data labels
 Every reading carries `source`: `simulated`, `estimated` or `measured`.
